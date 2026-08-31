@@ -28,6 +28,7 @@ import javax.swing.KeyStroke;
 import javax.swing.LookAndFeel;
 import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
+import javax.swing.plaf.metal.MetalLookAndFeel;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import javax.swing.filechooser.FileNameExtensionFilter;
@@ -104,11 +105,7 @@ public final class GoodyGuiEditor extends JFrame {
         // Thread. invokeLater queues us there after the OS look-and-feel is set.
         SwingUtilities.invokeLater(new Runnable() {
             public void run() {
-                try {
-                    UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
-                } catch (Exception ignored) {
-                    // WORKING: if the native L&F fails we keep Metal rather than crash.
-                }
+                installAppLookAndFeel();
                 new GoodyGuiEditor().setVisible(true);
             }
         });
@@ -119,17 +116,37 @@ public final class GoodyGuiEditor extends JFrame {
     // -------------------------------------------------------------------------
 
     /**
-     * WORKING: JFileChooser picks up whatever look-and-feel is installed at
-     * construction time. Aqua (macOS) and GTK (Raspberry Pi OS / most Linux)
-     * both ship long-standing JDK bugs in that dialog:
+     * WORKING: Linux cannot keep GTK installed. Swing's GTK look-and-feel has a
+     * long-standing JFileChooser bug (folder double-click does nothing; Enter
+     * still works). Building only the chooser under Metal is not enough: GTK
+     * stays loaded and its mouse handling can leave clickCount at 1, so even a
+     * Metal chooser still ignores double-clicks. The whole Linux app uses Metal.
+     * macOS stays Aqua (native menus) and only the file dialog is Metal, which
+     * also fixes Aqua's unclickable "All Files" item. Windows stays native.
+     */
+    private static void installAppLookAndFeel() {
+        try {
+            if (isLinux()) {
+                UIManager.setLookAndFeel(new MetalLookAndFeel());
+            } else {
+                UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
+            }
+        } catch (Exception ignored) {
+            // WORKING: if the native L&F fails we keep Metal rather than crash.
+        }
+    }
+
+    /**
+     * WORKING: JFileChooser installs its UI at construction, and again when
+     * lazily built widgets appear at show time. Aqua (macOS) and GTK both ship
+     * JDK bugs in that dialog:
      *   1. Aqua — the "All Files" item in the filter dropdown often cannot be
      *      selected (you can see it, clicking it does nothing).
      *   2. GTK — double-clicking a folder does not enter it; Enter still works.
-     * Windows' system chooser does not have these, so we leave it native.
-     * On Mac and Linux we build the chooser under Metal (the cross-platform
-     * look-and-feel), then switch UIManager back so the rest of the app stays native.
-     * We must not call updateUI() on the chooser afterwards, or it would
-     * pick up Aqua/GTK again.
+     * On Mac (and Linux, as belt-and-suspenders) we install Metal, build the
+     * chooser, then restore the previous L&F so the main window stays native on
+     * Mac. We must not call updateUI() on the chooser after restoring, or it
+     * would pick up Aqua/GTK again.
      */
     private static JFileChooser newFileChooser() {
         if (!fileChooserNeedsMetal()) {
@@ -137,18 +154,55 @@ public final class GoodyGuiEditor extends JFrame {
         }
         LookAndFeel previous = UIManager.getLookAndFeel();
         try {
-            UIManager.setLookAndFeel(UIManager.getCrossPlatformLookAndFeelClassName());
-            return new JFileChooser();
+            UIManager.setLookAndFeel(new MetalLookAndFeel());
+            JFileChooser created = new JFileChooser();
+            SwingUtilities.updateComponentTreeUI(created);
+            return created;
         } catch (Exception e) {
             return new JFileChooser();
         } finally {
-            try {
-                UIManager.setLookAndFeel(previous);
-            } catch (Exception ignored) {
-                // WORKING: restoring the look-and-feel failed; the main window
-                // may look mixed, but that is better than crashing Open/Save.
-            }
+            restoreLookAndFeel(previous);
         }
+    }
+
+    /**
+     * WORKING: some FileChooser widgets (the file list) are created the first
+     * time the dialog is shown, and would take Aqua/GTK from the current
+     * UIManager. Switch to Metal for the show call, refresh the chooser, then
+     * put the app L&F back without touching the chooser's UI.
+     */
+    private int showChooserDialog(boolean open) {
+        if (!fileChooserNeedsMetal()) {
+            return open ? chooser.showOpenDialog(this) : chooser.showSaveDialog(this);
+        }
+        LookAndFeel previous = UIManager.getLookAndFeel();
+        try {
+            UIManager.setLookAndFeel(new MetalLookAndFeel());
+            SwingUtilities.updateComponentTreeUI(chooser);
+        } catch (Exception ignored) {
+            // WORKING: show with whatever UI the chooser already has.
+        }
+        try {
+            return open ? chooser.showOpenDialog(this) : chooser.showSaveDialog(this);
+        } finally {
+            restoreLookAndFeel(previous);
+        }
+    }
+
+    private static void restoreLookAndFeel(LookAndFeel previous) {
+        if (previous == null) {
+            return;
+        }
+        try {
+            UIManager.setLookAndFeel(previous);
+        } catch (Exception ignored) {
+            // WORKING: restoring the look-and-feel failed; the main window
+            // may look mixed, but that is better than crashing Open/Save.
+        }
+    }
+
+    private static boolean isLinux() {
+        return System.getProperty("os.name", "").toLowerCase().contains("linux");
     }
 
     private static boolean fileChooserNeedsMetal() {
@@ -333,7 +387,7 @@ public final class GoodyGuiEditor extends JFrame {
         if (!confirmProceed("Open")) {
             return;
         }
-        if (chooser.showOpenDialog(this) != JFileChooser.APPROVE_OPTION) {
+        if (showChooserDialog(true) != JFileChooser.APPROVE_OPTION) {
             return;
         }
         Path path = chooser.getSelectedFile().toPath().toAbsolutePath().normalize();
@@ -355,7 +409,7 @@ public final class GoodyGuiEditor extends JFrame {
     }
 
     private boolean saveFileAs() {
-        if (chooser.showSaveDialog(this) != JFileChooser.APPROVE_OPTION) {
+        if (showChooserDialog(false) != JFileChooser.APPROVE_OPTION) {
             return false;
         }
         Path path = chooser.getSelectedFile().toPath().toAbsolutePath().normalize();
