@@ -25,6 +25,7 @@ import javax.swing.JOptionPane;
 import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
 import javax.swing.KeyStroke;
+import javax.swing.LookAndFeel;
 import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
 import javax.swing.event.DocumentEvent;
@@ -63,7 +64,7 @@ public final class GoodyGuiEditor extends JFrame {
 
     private final JTextArea textArea = new JTextArea();
     private final JLabel status = new JLabel();
-    private final JFileChooser chooser = new JFileChooser();
+    private final JFileChooser chooser;
     private final UndoManager undo = new UndoManager();
 
     // WORKING: null path means untitled (File > New), same idea as console v2.
@@ -84,6 +85,7 @@ public final class GoodyGuiEditor extends JFrame {
             }
         });
 
+        chooser = newFileChooser();
         buildChooser();
         buildTextArea();
         setJMenuBar(buildMenuBar());
@@ -116,7 +118,48 @@ public final class GoodyGuiEditor extends JFrame {
     // Widget setup
     // -------------------------------------------------------------------------
 
+    /**
+     * WORKING: JFileChooser picks up whatever look-and-feel is installed at
+     * construction time. Aqua (macOS) and GTK (Raspberry Pi OS / most Linux)
+     * both ship long-standing JDK bugs in that dialog:
+     *   1. Aqua — the "All Files" item in the filter dropdown often cannot be
+     *      selected (you can see it, clicking it does nothing).
+     *   2. GTK — double-clicking a folder does not enter it; Enter still works.
+     * Windows' system chooser does not have these, so we leave it native.
+     * On Mac and Linux we build the chooser under Metal (the cross-platform
+     * look-and-feel), then switch UIManager back so the rest of the app stays native.
+     * We must not call updateUI() on the chooser afterwards, or it would
+     * pick up Aqua/GTK again.
+     */
+    private static JFileChooser newFileChooser() {
+        if (!fileChooserNeedsMetal()) {
+            return new JFileChooser();
+        }
+        LookAndFeel previous = UIManager.getLookAndFeel();
+        try {
+            UIManager.setLookAndFeel(UIManager.getCrossPlatformLookAndFeelClassName());
+            return new JFileChooser();
+        } catch (Exception e) {
+            return new JFileChooser();
+        } finally {
+            try {
+                UIManager.setLookAndFeel(previous);
+            } catch (Exception ignored) {
+                // WORKING: restoring the look-and-feel failed; the main window
+                // may look mixed, but that is better than crashing Open/Save.
+            }
+        }
+    }
+
+    private static boolean fileChooserNeedsMetal() {
+        String os = System.getProperty("os.name", "").toLowerCase();
+        return os.contains("mac") || os.contains("darwin") || os.contains("linux");
+    }
+
     private void buildChooser() {
+        // WORKING: All Files is on by default; we set it explicitly so the
+        // Metal dropdown always has a working "show everything" option.
+        chooser.setAcceptAllFileFilterUsed(true);
         FileNameExtensionFilter txt = new FileNameExtensionFilter("Text files (*.txt)", "txt");
         chooser.addChoosableFileFilter(txt);
         chooser.setFileFilter(txt);

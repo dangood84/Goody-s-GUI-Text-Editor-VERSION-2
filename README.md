@@ -41,6 +41,7 @@ Close starts a blank untitled buffer (Notepad-style). Exit leaves the app. Unsav
 - Cut, copy, and paste use the **system clipboard**.
 - Undo uses Swing's `UndoManager` (per edit, not a full-file snapshot).
 - Open and Save As use `JFileChooser` instead of typing `~` paths.
+- On **macOS** and **Linux** (including Raspberry Pi OS) the file dialog uses Swing's Metal look, not the native one. That is a workaround for two JDK bugs: macOS often cannot select **All Files**, and GTK file choosers often ignore double-clicks on folders (Enter still works). Windows keeps the native dialog.
 
 ## Layout
 
