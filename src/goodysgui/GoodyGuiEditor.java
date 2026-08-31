@@ -1,13 +1,18 @@
 package goodysgui;
 
 import java.awt.BorderLayout;
+import java.awt.Component;
+import java.awt.Container;
 import java.awt.Font;
 import java.awt.Toolkit;
 import java.awt.event.ActionEvent;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
+import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -15,23 +20,28 @@ import java.nio.file.Path;
 import javax.swing.AbstractAction;
 import javax.swing.Action;
 import javax.swing.JCheckBoxMenuItem;
+import javax.swing.JComponent;
 import javax.swing.JFileChooser;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
+import javax.swing.JList;
 import javax.swing.JMenu;
 import javax.swing.JMenuBar;
 import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
 import javax.swing.JScrollPane;
+import javax.swing.JTable;
 import javax.swing.JTextArea;
 import javax.swing.KeyStroke;
 import javax.swing.LookAndFeel;
 import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
-import javax.swing.plaf.metal.MetalLookAndFeel;
+import javax.swing.event.AncestorEvent;
+import javax.swing.event.AncestorListener;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import javax.swing.filechooser.FileNameExtensionFilter;
+import javax.swing.plaf.metal.MetalLookAndFeel;
 import javax.swing.undo.CannotUndoException;
 import javax.swing.undo.UndoManager;
 
@@ -62,6 +72,10 @@ import javax.swing.undo.UndoManager;
 public final class GoodyGuiEditor extends JFrame {
 
     private static final String APP_NAME = "Goody's GUI Text Editor";
+
+    // WORKING: marks file-list widgets we already hooked, so show-time
+    // updateUI() does not stack a second mouse listener on the same list.
+    private static final String FOLDER_CLICK_FIX = "goodysgui.folderDoubleClickFix";
 
     private final JTextArea textArea = new JTextArea();
     private final JLabel status = new JLabel();
@@ -121,12 +135,15 @@ public final class GoodyGuiEditor extends JFrame {
      * still works). Building only the chooser under Metal is not enough: GTK
      * stays loaded and its mouse handling can leave clickCount at 1, so even a
      * Metal chooser still ignores double-clicks. The whole Linux app uses Metal.
+     * FileChooser.readOnly stops FilePane starting a rename on that second
+     * click (what you see on the Pi instead of entering the folder).
      * macOS stays Aqua (native menus) and only the file dialog is Metal, which
      * also fixes Aqua's unclickable "All Files" item. Windows stays native.
      */
     private static void installAppLookAndFeel() {
         try {
             if (isLinux()) {
+                UIManager.put("FileChooser.readOnly", Boolean.TRUE);
                 UIManager.setLookAndFeel(new MetalLookAndFeel());
             } else {
                 UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
@@ -182,6 +199,14 @@ public final class GoodyGuiEditor extends JFrame {
         } catch (Exception ignored) {
             // WORKING: show with whatever UI the chooser already has.
         }
+        installFolderDoubleClickFix(chooser);
+        // WORKING: showOpenDialog is modal. This runs once the dialog is up
+        // and FilePane has actually built the JList we need to hook.
+        SwingUtilities.invokeLater(new Runnable() {
+            public void run() {
+                installFolderDoubleClickFix(chooser);
+            }
+        });
         try {
             return open ? chooser.showOpenDialog(this) : chooser.showSaveDialog(this);
         } finally {
@@ -217,7 +242,156 @@ public final class GoodyGuiEditor extends JFrame {
         FileNameExtensionFilter txt = new FileNameExtensionFilter("Text files (*.txt)", "txt");
         chooser.addChoosableFileFilter(txt);
         chooser.setFileFilter(txt);
-        chooser.setCurrentDirectory(new java.io.File(System.getProperty("user.home")));
+        chooser.setCurrentDirectory(new File(System.getProperty("user.home")));
+        chooser.addAncestorListener(new AncestorListener() {
+            public void ancestorAdded(AncestorEvent event) {
+                installFolderDoubleClickFix(chooser);
+                SwingUtilities.invokeLater(new Runnable() {
+                    public void run() {
+                        installFolderDoubleClickFix(chooser);
+                    }
+                });
+            }
+
+            public void ancestorRemoved(AncestorEvent event) {
+            }
+
+            public void ancestorMoved(AncestorEvent event) {
+            }
+        });
+    }
+
+    /**
+     * WORKING: Swing opens a folder only when mouseClicked has clickCount == 2.
+     * On Raspberry Pi OS / GTK3, AWT often reports every click as count 1, so
+     * the JDK listener never fires and FilePane may start a rename instead.
+     * We watch mousePressed and treat two clicks on the same row within the
+     * desktop double-click interval as "enter folder" / "choose file".
+     * If clickCount is already 2, we leave it to the look-and-feel.
+     */
+    private static void installFolderDoubleClickFix(JFileChooser chooser) {
+        installFolderDoubleClickFixOn(chooser, chooser);
+    }
+
+    private static void installFolderDoubleClickFixOn(JFileChooser chooser, Container root) {
+        Component[] children = root.getComponents();
+        for (int i = 0; i < children.length; i++) {
+            Component child = children[i];
+            if (child instanceof JList) {
+                attachFolderDoubleClickFix(chooser, (JList<?>) child, null);
+            } else if (child instanceof JTable) {
+                attachFolderDoubleClickFix(chooser, null, (JTable) child);
+            }
+            if (child instanceof Container) {
+                installFolderDoubleClickFixOn(chooser, (Container) child);
+            }
+        }
+    }
+
+    private static void attachFolderDoubleClickFix(JFileChooser chooser, JList<?> list, JTable table) {
+        JComponent target = list != null ? (JComponent) list : table;
+        if (Boolean.TRUE.equals(target.getClientProperty(FOLDER_CLICK_FIX))) {
+            return;
+        }
+        target.putClientProperty(FOLDER_CLICK_FIX, Boolean.TRUE);
+        target.addMouseListener(new FolderDoubleClickFix(chooser, list, table));
+    }
+
+    private static int multiClickInterval() {
+        Object value = Toolkit.getDefaultToolkit().getDesktopProperty("awt.multiClickInterval");
+        if (value instanceof Integer && ((Integer) value).intValue() > 0) {
+            return ((Integer) value).intValue();
+        }
+        return 500;
+    }
+
+    private static void activateChooserFile(JFileChooser chooser, File file) {
+        if (file == null) {
+            return;
+        }
+        if (chooser.isTraversable(file)) {
+            chooser.setCurrentDirectory(file);
+            chooser.rescanCurrentDirectory();
+            chooser.requestFocusInWindow();
+        } else {
+            chooser.setSelectedFile(file);
+            chooser.approveSelection();
+        }
+    }
+
+    /**
+     * WORKING: per-list state so the files list and the details table do not
+     * share a click timestamp (Metal can show either view).
+     */
+    private static final class FolderDoubleClickFix extends MouseAdapter {
+        private final JFileChooser chooser;
+        private final JList<?> list;
+        private final JTable table;
+        private long lastWhen;
+        private int lastIndex = -1;
+
+        FolderDoubleClickFix(JFileChooser chooser, JList<?> list, JTable table) {
+            this.chooser = chooser;
+            this.list = list;
+            this.table = table;
+        }
+
+        public void mousePressed(MouseEvent e) {
+            if (!SwingUtilities.isLeftMouseButton(e) || e.isPopupTrigger()) {
+                return;
+            }
+            int index = indexAt(e);
+            File file = fileAt(index);
+            if (index < 0 || file == null) {
+                lastIndex = -1;
+                lastWhen = 0;
+                return;
+            }
+            // WORKING: real double-clicks still belong to Metal/Aqua/Windows.
+            if (e.getClickCount() >= 2) {
+                lastIndex = -1;
+                lastWhen = 0;
+                return;
+            }
+            long when = e.getWhen();
+            if (index == lastIndex && lastWhen > 0 && (when - lastWhen) <= multiClickInterval()) {
+                lastIndex = -1;
+                lastWhen = 0;
+                activateChooserFile(chooser, file);
+                e.consume();
+            } else {
+                lastIndex = index;
+                lastWhen = when;
+            }
+        }
+
+        private int indexAt(MouseEvent e) {
+            if (list != null) {
+                int index = list.locationToIndex(e.getPoint());
+                if (index < 0) {
+                    return -1;
+                }
+                java.awt.Rectangle bounds = list.getCellBounds(index, index);
+                if (bounds == null || !bounds.contains(e.getPoint())) {
+                    return -1;
+                }
+                return index;
+            }
+            return table.rowAtPoint(e.getPoint());
+        }
+
+        private File fileAt(int index) {
+            if (index < 0) {
+                return null;
+            }
+            Object value;
+            if (list != null) {
+                value = list.getModel().getElementAt(index);
+            } else {
+                value = table.getModel().getValueAt(index, 0);
+            }
+            return value instanceof File ? (File) value : null;
+        }
     }
 
     private void buildTextArea() {
