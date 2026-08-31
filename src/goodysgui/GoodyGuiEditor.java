@@ -456,7 +456,7 @@ public final class GoodyGuiEditor extends JFrame {
 
     private void refreshChrome() {
         String mark = dirty ? "*" : "";
-        setTitle(APP_NAME + " — " + displayName() + mark);
+        setTitle(APP_NAME + " \u2014 " + displayName() + mark);
         String where = currentPath == null ? "untitled" : currentPath.toString();
         String state = dirty ? "modified" : "saved";
         status.setText(where + "   |   " + state);
