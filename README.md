@@ -1,4 +1,4 @@
-# Goody's GUI Text Editor
+# Goody's GUI Text Editor V2
 
 A Swing desktop editor with **File**, **Edit**, and **Help** menus. Same job as [console v2](../GoodysTextEditorV2): create, open, save, and close files; copy, cut, and paste; undo.
 
@@ -14,7 +14,7 @@ This is a separate project. The console apps stay as they are.
 
 ```bash
 javac -d out src/goodysgui/*.java
-java -cp out goodysgui.GoodyGuiEditor
+java -cp out goodysgui.GoodyGuiEditorV2
 ```
 
 Those two lines work in bash, Git Bash, PowerShell, and Command Prompt on a machine with a GUI.
@@ -32,11 +32,13 @@ Those two lines work in bash, Git Bash, PowerShell, and Command Prompt on a mach
 
 Shortcuts use **Ctrl** on Windows/Linux and **Cmd** on Mac (`N` `O` `S` `Shift+S` `W` `Q` / `Z` `X` `C` `V` `A`). A `*` in the window title means unsaved changes.
 
+On **macOS**, those menus live in the **Mac menu bar** at the top of the screen (same place as Finder, Safari, and other Mac apps), not in a bar inside the window. Windows and Linux keep the menu bar in the window.
+
 Close starts a blank untitled buffer (Notepad-style). Exit leaves the app. Unsaved work offers **Save / Don't Save / Cancel**.
 
 ## How this differs from console v2
 
-- The File / Edit / Help grouping is a real `JMenuBar`, not nested console lists.
+- The File / Edit / Help grouping is a real `JMenuBar`, not nested console lists. On macOS that bar is installed in the system menu bar (`apple.laf.useScreenMenuBar`).
 - You type in a `JTextArea` instead of Append / Insert line / Edit line.
 - Cut, copy, and paste use the **system clipboard**.
 - Undo uses Swing's `UndoManager` (per edit, not a full-file snapshot).
@@ -47,7 +49,7 @@ Close starts a blank untitled buffer (Notepad-style). Exit leaves the app. Unsav
 
 | Class | Role |
 |---|---|
-| `GoodyGuiEditor` | Window, menus, text area, dirty flag, undo |
+| `GoodyGuiEditorV2` | Window, menus, text area, dirty flag, undo |
 | `TextFileIO` | UTF-8 load/save with platform line endings |
 
 Comments in the source walk through the design choices.

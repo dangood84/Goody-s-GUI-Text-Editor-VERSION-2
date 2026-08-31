@@ -67,11 +67,14 @@ import javax.swing.undo.UndoManager;
  *
  * Run:
  *   javac -d out src/goodysgui/*.java
- *   java -cp out goodysgui.GoodyGuiEditor
+ *   java -cp out goodysgui.GoodyGuiEditorV2
+ *
+ * On macOS, apple.laf.useScreenMenuBar puts File / Edit / Help in the
+ * system menu bar at the top of the screen, not inside the window.
  */
-public final class GoodyGuiEditor extends JFrame {
+public final class GoodyGuiEditorV2 extends JFrame {
 
-    private static final String APP_NAME = "Goody's GUI Text Editor";
+    private static final String APP_NAME = "Goody's GUI Text Editor V2";
 
     // WORKING: marks file-list widgets we already hooked, so show-time
     // updateUI() does not stack a second mouse listener on the same list.
@@ -91,7 +94,7 @@ public final class GoodyGuiEditor extends JFrame {
     // not immediately look like unsaved edits.
     private boolean syncing;
 
-    private GoodyGuiEditor() {
+    private GoodyGuiEditorV2() {
         super(APP_NAME);
         setDefaultCloseOperation(DO_NOTHING_ON_CLOSE);
         addWindowListener(new WindowAdapter() {
@@ -117,10 +120,14 @@ public final class GoodyGuiEditor extends JFrame {
     public static void main(String[] args) {
         // WORKING: all Swing construction must happen on the Event Dispatch
         // Thread. invokeLater queues us there after the OS look-and-feel is set.
+
+        // DG - Will attempt to insert Mac OS menu in menubar if possible.
+        System.setProperty("apple.laf.useScreenMenuBar", "true");
+        
         SwingUtilities.invokeLater(new Runnable() {
             public void run() {
                 installAppLookAndFeel();
-                new GoodyGuiEditor().setVisible(true);
+                new GoodyGuiEditorV2().setVisible(true);
             }
         });
     }
