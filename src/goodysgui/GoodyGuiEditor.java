@@ -377,9 +377,9 @@ public final class GoodyGuiEditor extends JFrame {
     private void showHowToUse() {
         JOptionPane.showMessageDialog(this,
                 String.join("\n",
-                        "File — New, Open, Save, Save As, Close, Exit",
-                        "Edit — Undo, Cut, Copy, Paste, Select All, Word Wrap",
-                        "Help — this window, and About",
+                        "File" + " " + \u2014 + " " + "New, Open, Save, Save As, Close, Exit",
+                        "Edit" + " " + \u2014 + " " + "Undo, Cut, Copy, Paste, Select All, Word Wrap",
+                        "Help" + " " + \u2014 + " " + "this window, and About",
                         "",
                         "Shortcuts use Ctrl on Windows/Linux and Cmd on Mac.",
                         "A * in the title means unsaved changes.",
@@ -456,7 +456,7 @@ public final class GoodyGuiEditor extends JFrame {
 
     private void refreshChrome() {
         String mark = dirty ? "*" : "";
-        setTitle(APP_NAME + " \u2014 " + displayName() + mark);
+        setTitle(APP_NAME + " " + \u2014 + " " + displayName() + mark);
         String where = currentPath == null ? "untitled" : currentPath.toString();
         String state = dirty ? "modified" : "saved";
         status.setText(where + "   |   " + state);
