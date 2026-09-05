@@ -1,3 +1,40 @@
+# Compiled classes (javac -d out)
 out/
+bin/
+build/
+target/
+dist/
 *.class
+
+# Packaged apps and leftover manifests
+*.jar
+*.war
+*.ear
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.txt
+
+# JVM crash / replay dumps
+hs_err_pid*
+replay_pid*
+*.hprof
+*.log
+
+# Editors and IDEs
+.idea/
+*.iml
+.vscode/
+.classpath
+.project
+.settings/
+*.swp
+*.swo
+*~
+*.bak
+
+# OS junk
 .DS_Store
+Thumbs.db
+Desktop.ini
