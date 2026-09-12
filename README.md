@@ -19,6 +19,15 @@ java -cp out goodysgui.GoodyGuiEditorV2
 
 Those two lines work in bash, Git Bash, PowerShell, and Command Prompt on a machine with a GUI.
 
+To pack a runnable jar (JDK 8's `jar` uses short flags, not `--create`):
+
+```bash
+jar cfm GoodyGuiEditorV2.jar Manifest.txt -C out .
+java -jar GoodyGuiEditorV2.jar
+```
+
+On **macOS**, Finder will not launch the `.jar` (Apple's JavaLauncher often does nothing). Double-click **`GoodyGuiEditorV2.command`** instead. That opens Terminal and runs `java -jar`. The first time, macOS may ask you to allow it: right-click the `.command` file → Open.
+
 ## Menus
 
 | File | Edit | Help |
