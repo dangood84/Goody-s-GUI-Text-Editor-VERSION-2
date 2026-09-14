@@ -15,6 +15,7 @@ dist/
 *.tar.gz
 *.tgz
 *.txt
+!Manifest.txt
 
 # JVM crash / replay dumps
 hs_err_pid*
